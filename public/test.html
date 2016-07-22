@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=9">
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js"></script>
+<script type="text/javascript" src="this-play.min.js"></script>
+<script>
+
+function selectTextareaLine(tarea, lineNum) {
+    lineNum--; // array starts at 0
+    var lines = tarea.value.split("\n");
+
+    // calculate start/end
+    var startPos = 0, endPos = tarea.value.length;
+    for(var x = 0; x < lines.length; x++) {
+        if(x == lineNum) {
+            break;
+        }
+        startPos += (lines[x].length+1);
+
+    }
+
+    var endPos = lines[lineNum].length+startPos;
+
+    // do selection
+    // Chrome / Firefox
+
+    if(typeof(tarea.selectionStart) != "undefined") {
+        tarea.focus();
+        tarea.selectionStart = startPos;
+        tarea.selectionEnd = endPos;
+        return true;
+    }
+
+    // IE
+    if (document.selection && document.selection.createRange) {
+        tarea.focus();
+        tarea.select();
+        var range = document.selection.createRange();
+        range.collapse(true);
+        range.moveEnd("character", endPos);
+        range.moveStart("character", startPos);
+        range.select();
+        return true;
+    }
+
+    return false;
+}
+
+var app = angular.module("myApp", []);
+
+app.controller("myCtrl", function ($scope, $http) {
+	$scope.txtCode = "";
+	$scope.txtInput = "";
+	$scope.txtTargets = "";
+	$scope.txtBreaks = "";
+
+	$scope.scheduler = new this_play.Scheduler();
+
+	$scope.scheduler.on('step', function () {
+		selectTextareaLine(document.getElementById('txtCode'), 
+			$scope.scheduler.getLine());
+	});
+
+	$scope.scheduler.on('change', function (info) {
+		console.log(JSON.stringify(info));
+	});
+
+	$scope.btnUpload = function () {
+		$scope.scheduler.unbind();
+
+		var targets = [];
+		var breaks = [];
+		var txtTargets = $scope.txtTargets.trim();
+		var txtBreaks = $scope.txtBreaks.trim();
+
+		if (txtTargets) {
+			txtTargets.split(' ').forEach((target) => {
+				targets.push(target);
+			});
+		}
+
+		if (txtBreaks) {
+			txtBreaks.split(' ').forEach((breakpoint) => {
+				breaks.push(Number(breakpoint));
+			});
+		}
+
+		$http({
+			method: 'POST',
+			url: '/test',
+			data: {
+				"userCode": $scope.txtCode,
+				"userInput": $scope.txtInput,
+				"targets": targets,
+				"breaks": breaks
+			}
+		}).then(
+			function (res) {
+				$('#resResult').html(JSON.stringify(res.data, null, 2));
+				$scope.scheduler.bind(res.data);
+			}, 
+			function (res) {
+				console.log(res);
+			}
+		);
+	};
+
+	$scope.btnStep = function () {
+		$scope.scheduler.step();
+	};
+
+	$scope.btnRun = function () {
+		var interval = setInterval(function () {
+			if (!$scope.isSchedulerReady()) {
+				return clearInterval(interval);
+			}
+			$scope.btnStep();
+		}, 500)
+
+	};
+
+	$scope.isSchedulerReady = function () {
+		return !($scope.scheduler.getStep().current == 0 || 
+		$scope.scheduler.getStep().current == $scope.scheduler.getStep().max)
+	};
+
+});
+
+</script>
+</head>
+<body ng-app="myApp" ng-controller="myCtrl">
+	<div>
+		<p>
+		<span>code</span>
+		<textarea style="height:500px; width:500px;" id="txtCode" ng-model="txtCode"></textarea>
+		</p>
+		<p>
+		<span>input</span>
+		<textarea style="height: 100px; width:500px;" ng-model="txtInput"></textarea>
+		</p>
+		<p>
+		<span>targets</span>
+		<input style="width:200px;" type="text", ng-model="txtTargets" />
+		</p>
+		<p>
+		<span>breaks</span>
+		<input style="width:200px;" type="text" ng-model="txtBreaks" />
+		</p>
+		<input type="button" value="upload!" ng-click="btnUpload()" />
+		<input type="button" ng-disabled="!isSchedulerReady()" value="step" ng-click="btnStep()" />
+		<input type="button" ng-disabled="!isSchedulerReady()" value="run" ng-click="btnRun()" />
+	</div>
+	<pre id="resResult">
+
+	</pre>
+</body>
+</html>
